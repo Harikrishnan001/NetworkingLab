@@ -1,126 +1,155 @@
-import java.net.*;
 import java.util.*;
 import java.io.*;
+import java.net.*;
 
-class WindowCheck extends TimerTask{
-	
-	final Vector<Frame> v;
-	final Vector<Integer> pointers;
-	final int checkIndex; 
-	
-	public WindowCheck(Vector<Frame> v,Vector<Integer> pointers,int checkIndex)
+class SlidingWindow
+{
+	private final DataOutputStream dout;
+	private final int frameCount;
+	public final int sequenceCount;
+	private int start,end;
+
+	public SlidingWindow(int frameCount,int windowSize,DataOutputStream dout)
 	{
-		this.v=v;
-		this.checkIndex=checkIndex;
-		this.pointers=pointers;
+		this.frameCount=frameCount;
+		this.sequenceCount=windowSize+1;
+		this.dout=dout;
+		start=0;//first outstanding frame
+		end=windowSize;//next frame to send
 	}
-	
-	public void run() {
-		if(!v.elementAt(checkIndex).isAck)
-			pointers.set(1, pointers.elementAt(0));		
+
+	public void sendFrames() throws IOException
+	{
+		if(start==end && start==frameCount)
+			return;
+		for(int i=start;i<=end-1;i++)
+		{
+			print("Sending frame no:"+i+"...\n");
+			dout.write(i%sequenceCount);
+			print("Frame send!\n");
+		}
+	}
+
+	public void slideWindow(int offset)
+	{
+		if(end==frameCount)
+		{
+			start++;
+			return;
+		}
+		start+=Math.min(offset,frameCount-end);
+		end+=Math.min(offset,frameCount-end);
+	}
+
+	public boolean areAllSend()
+	{
+		return end==start && start==frameCount;
+	}
+
+	//Check if a sequence number is between the range of sequence numbers already sent
+	public boolean isInRange(int sequenceNumber)
+	{
+		for(int i=start;i<=end-1;i++)
+			if(sequenceNumber==i%sequenceCount)
+				return true;
+		return false;
+	}
+
+	public int getOffsetFromFirstOutStandingFrame(int sequenceNumber)
+	{
+		int offset=1;
+		for(int i=start+1;i<=end-1;i++)
+			if(i==sequenceNumber)
+				break;
+			else
+				offset++;
+		return offset;
+	}
+
+	private void print(Object o)
+	{
+		System.out.print(o);
 	}
 }
 
-class AckCheckThread extends Thread{
-	
-	final DataInputStream din;
-	final Vector<Integer> pointers;
-	final Vector<Frame> v;
-	
-	public AckCheckThread(DataInputStream din,Vector<Frame> v,Vector<Integer> pointers)
+class AckCheckThread extends Thread
+{
+	private final DataInputStream din;
+	private final SlidingWindow senderWindow;
+	private final int frameCount;
+
+	public AckCheckThread(DataInputStream din,SlidingWindow senderWindow,int frameCount)
 	{
 		this.din=din;
-		this.v=v;
-		this.pointers=pointers;
+		this.senderWindow=senderWindow;
+		this.frameCount=frameCount;
 	}
-	
+
 	public void run()
 	{
-		int ack;
-		while(pointers.elementAt(0)!=v.size())
+		int ack,ackCount=0,expected=1;
+		while(ackCount!=frameCount-1)
 		{
-			try {
-			ack=din.readInt();//here ack indicates the frame number that was accepted by server
-			for(int i=pointers.elementAt(0);i<pointers.elementAt(1);i++)
-				if(ack==v.elementAt(i).number)
-				{
-					v.elementAt(i).isAck=true;
-					System.out.println("Acknowledgement "+ack+" recieved!\n");
-					for(int j=i+1;j<pointers.elementAt(1);j++)
-						if(!v.elementAt(j).isAck)
-						{
-							System.out.println("First outgoing frame at index:"+j);
-							System.out.println("Next frame to send at index:"+pointers.elementAt(1));
-							pointers.set(0, j);
-							break;
-						}
-					break;
-				}
-			}catch(IOException e)
+			try
 			{
-				System.out.println("ERROR:Something went wrong!\n");
+				ack=din.readInt();
+				if(ack==expected)
+				{
+					expected=(expected+1)%senderWindow.sequenceCount;
+					ackCount++;
+					senderWindow.slideWindow(1);
+					senderWindow.sendFrames();
+				}
+				else if(senderWindow.isInRange(ack-1<0?senderWindow.sequenceCount-1:ack-1))
+				{
+					int prevSeqNo=ack-1<0?senderWindow.sequenceCount-1:ack-1;
+					int offset=senderWindow.getOffsetFromFirstOutStandingFrame(prevSeqNo)+1;
+					ackCount+=offset;
+					senderWindow.slideWindow(offset);
+					senderWindow.sendFrames();
+				}
 			}
+			catch(IOException e)
+			{
+				System.out.println("ERROR:Something went wrong");
+			}
+
 		}
 	}
 }
 
 public class Client{
-	
-	final static long timeout=10000;//timeout for resending n frames
 
-	private static void print(Object o)
+	private static final int timeout=5000;
+
+	private static void print(Object obj)
 	{
-		System.out.print(o);
+		System.out.print(obj);
 	}
-	
-	public static void main(String args[])throws Exception
+
+	public static void main() throws Exception
 	{
-		int m,n;
-		Vector<Integer> pointers=new Vector<Integer>();
-		pointers.add(0);//index of first outstanding frame
-		pointers.add(0);//index of next frame to send
-		Vector<Frame> v=new Vector<>();
-		String content;//used to fetch data of each frame
-		Frame current_frame;
+		int windowSize,frameCount;
 		Scanner sc=new Scanner(System.in);
-		Timer timer=new Timer();
 		
+		print("Enter the window size:");
+		windowSize=sc.nextInt();
+		print("Enter the number of frames to send:");
+		frameCount=sc.nextInt();
+
 		print("Connecting to server...\n");
 		Socket sock=new Socket("localhost",5555);
-		print("Connected to server!\n");
-		
+		print("Connection successful!\n");
 		DataInputStream din=new DataInputStream(new BufferedInputStream(sock.getInputStream()));
 		DataOutputStream dout=new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
+		SlidingWindow senderWindow=new SlidingWindow(frameCount, windowSize,dout);
 		
-		print("Enter the count of sequence numbers:");
-		m=sc.nextInt();
-		print("Enter the number of frames to send:");
-		n=sc.nextInt();
+		new AckCheckThread(din, senderWindow, frameCount).start();
 
-		print("\n");
-		for(int i=0;i<n;i++)
+		while(!senderWindow.areAllSend())
 		{
-			print("Enter the content of frame no "+i+" : ");
-			content=sc.next();
-			v.add(new Frame(i%m,content));
-		}
-
-		new AckCheckThread(din, v, pointers).start();
-		
-		print("\n");
-		while(pointers.elementAt(0)!=n)
-		{
-			if(pointers.elementAt(1)-pointers.elementAt(0)+1<=m-1)
-			{
-				current_frame=v.elementAt(pointers.elementAt(1));
-				print("Sending frame no "+pointers.elementAt(1)+"...\n");
-				dout.writeUTF(current_frame.number+" "+current_frame.data);
-				dout.flush();
-				timer.schedule(new WindowCheck(v,pointers,pointers.elementAt(1)), timeout);
-				pointers.set(1,Math.min( pointers.elementAt(1)+1,n-1));
-				print("Next frame to send at index:"+pointers.elementAt(1)+"\n");
-				print("Frame send!\n");
-			}
+			senderWindow.sendFrames();
+			Thread.sleep(timeout);
 		}
 
 		sc.close();
