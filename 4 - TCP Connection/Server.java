@@ -2,41 +2,39 @@ import java.io.*;
 import java.net.*;
 import java.util.Scanner;
 
-public class Server 
-{
+public class Server{
 
-    private static void print(Object o)
-    {
-        System.out.print(o);
-    }
-    public static void main(String args[])  throws IOException  
-    {
-        ServerSocket serSock;
-        Socket sock;
-        DataInputStream din;
-        String line="";
-        Scanner sc=new Scanner(System.in);
+	private static void print(Object o){
+		System.out.print(o);
+	}
 
-        print("Starting server...\n");
-        serSock=new ServerSocket(5555);
-        print("Server started!\n\n");
-        print("Waiting for client...\n");
-        sock=serSock.accept();
-        print("Client connected!\n\n");
+	public static void main(String args[]) throws Exception{
+		Scanner sc=new Scanner(System.in);
+		ServerSocket serSock=new ServerSocket(5555);
+		print("Waiting for client to connect...\n");
+		Socket sock=serSock.accept();
+		print("Client connected!\n\n");
 
-        din=new DataInputStream(new BufferedInputStream(sock.getInputStream()));
+		DataInputStream din=new DataInputStream(new BufferedInputStream(sock.getInputStream()));
+		DataOutputStream dout=new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
 
-        while(!line.equals("bye"))//terminate server when bye is recieved
-        {
-            print("Waiting for message...\n");
-            line=din.readUTF();
-            print("Message from client:"+line+"\n\n");
-        }
-        
-        din.close();
-        sc.close();
-        sock.close();
-        serSock.close();
-        print("Connection aborted!\n");
-    }
+		String data="",message="";
+		while(!message.equals("bye")  && !data.equals("bye"))
+		{
+			message=din.readUTF();
+			print("Client:"+message+"\n");
+			print("Server:");
+			data=sc.nextLine();
+			dout.writeUTF(data);
+			dout.flush();
+		}
+
+		sc.close();
+		din.close();
+		dout.close();
+		sock.close();
+		serSock.close();
+		print("Connection terminated!\n");
+
+	}
 }
