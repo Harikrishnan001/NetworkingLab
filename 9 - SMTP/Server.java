@@ -26,7 +26,7 @@ public class Server {
         DataInputStream din=new DataInputStream(new BufferedInputStream(socket.getInputStream()));
         DataOutputStream dout=new DataOutputStream(socket.getOutputStream());
 
-        send(221,"hamburger.edu",dout);
+        send(220,"hamburger.edu",dout);
 
         String message="",sender="",reciever="",client="",mail="";
         while(true){
