@@ -2,14 +2,6 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
-class Frame{
-	int  number;
-	boolean recieved=false;
-	public Frame(int number){
-		this.number=number;
-	}
-}
-
 public class Server {
     private static void print(Object o) {
         System.out.print(o);
