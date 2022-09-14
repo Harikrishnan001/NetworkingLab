@@ -1,60 +1,37 @@
-import java.net.*;
-import java.util.*;
 import java.io.*;
+import java.net.*;
+import java.util.Scanner;
 
-public class Client{
-	
-	private static void print(Object o)
-	{
+public class Client {
+
+	private static void print(Object o) {
 		System.out.print(o);
 	}
-	
-	public static void main(String args[])throws Exception
-	{
-		Socket sock=new Socket("127.0.0.1",5555);
-		print("Client connected!\n");
-		
+
+	public static void main(String args[]) throws Exception {
+		int n;
 		Scanner sc=new Scanner(System.in);
-		DataOutputStream dout=new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
+		Socket sock=new Socket("localhost",5555);
 		DataInputStream din=new DataInputStream(new BufferedInputStream(sock.getInputStream()));
-		
-		print("Enter n:");
-		int maxFrames=sc.nextInt();
-		print("Enter the number of frames to send:");
-		int frames=sc.nextInt();
-		int curFrame=-1,ack;
-		boolean isError=false;
+		DataOutputStream dout=new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
 
-		for(int i=0;i<frames;i++)
+		print("Enter the number of packets to send:");
+		n=sc.nextInt();
+		for(int i=0;i<n;i++)
 		{
-			print("\nEnter the frame no:");
-			curFrame=sc.nextInt();
-			print("Sending frame no "+curFrame+" ...\n");
-			dout.writeInt(curFrame);
+			print("\nSending packet "+i);
+			dout.writeInt(i);
 			dout.flush();
-			print("Frame sent!\n");
-			print("Waiting for acknowledgement...\n");
-			ack=din.readInt();
-			print("Acknowledment recieved("+ack+")!\n");
-			if(ack!=(curFrame+1)%maxFrames)
-			{
-				isError=true;
-				i--;
-				print("ACK_ERROR:Try to resend the frame\n");
-			}
-			else
-			{
-				isError=false;
-			}
-
+			Thread.sleep(2000);
+			print(".\n");
+			Thread.sleep(2000);
+			din.readInt();
+			print("Acknowledgement recieved.\n");
 		}
 
-		print("Aborting connection...\n");
-		dout.writeInt(-1);
-		dout.flush();
-		sc.close();
+		din.close();
 		dout.close();
 		sock.close();
-		print("Connection aborted!\n");
+		sc.close();
 	}
 }

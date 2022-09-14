@@ -22,7 +22,7 @@ public class LeakyBucket {
             }
             else
             {
-                System.out.println("Packet loss:"+(bucketSize-store));
+                System.out.println("Packet loss:"+(incoming-(bucketSize-store)));
                 System.out.println("Buffer is full!");
                 store=bucketSize;
             }
